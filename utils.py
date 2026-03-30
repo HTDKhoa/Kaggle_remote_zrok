@@ -155,10 +155,9 @@ class Zrok:
 
         print("Downloading latest zrok2 release")
         
-        # Get latest release version
+        # Get latest release info
         response = urllib.request.urlopen("https://api.github.com/repos/openziti/zrok/releases/latest")
         data = json.loads(response.read())
-        version = data["tag_name"]
         
         # Determine architecture
         machine = platform.machine()
@@ -171,12 +170,25 @@ class Zrok:
         else:
             raise OSError(f"Unsupported architecture: {machine}")
         
-        # Construct download URL
-        url = f"https://github.com/openziti/zrok/releases/download/{version}/zrok2_{version[1:]}_linux_{arch}.tar.gz"
-        print(f"Downloading from: {url}")
+        # Find the correct asset from the release
+        download_url = None
+        for asset in data.get("assets", []):
+            url = asset["browser_download_url"]
+            if f"linux_{arch}" in url and ".tar.gz" in url:
+                download_url = url
+                print(f"Found release: {asset['name']}")
+                break
+        
+        if not download_url:
+            print("Available releases:")
+            for asset in data.get("assets", []):
+                print(f"  - {asset['name']}")
+            raise FileNotFoundError(f"Could not find zrok2 release for linux_{arch}")
+        
+        print(f"Downloading from: {download_url}")
         
         # Download zrok2
-        urllib.request.urlretrieve(url, "zrok2.tar.gz")
+        urllib.request.urlretrieve(download_url, "zrok2.tar.gz")
         
         print("Extracting zrok2")
         with tarfile.open("zrok2.tar.gz", "r:gz") as tar:
