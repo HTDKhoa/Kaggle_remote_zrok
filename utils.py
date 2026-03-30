@@ -154,22 +154,29 @@ class Zrok:
                             please install zrok2 manually following the instructions at https://docs.zrok.io/docs/guides/install/")
 
         print("Downloading latest zrok2 release")
-        # Get latest release info
+        
+        # Get latest release version
         response = urllib.request.urlopen("https://api.github.com/repos/openziti/zrok/releases/latest")
         data = json.loads(response.read())
+        version = data["tag_name"]
         
-        # Find linux_amd64 tar.gz download URL for zrok2
-        download_url = None
-        for asset in data["assets"]:
-            if "zrok2" in asset["browser_download_url"] and "linux_amd64.tar.gz" in asset["browser_download_url"]:
-                download_url = asset["browser_download_url"]
-                break
+        # Determine architecture
+        machine = platform.machine()
+        if machine == "x86_64":
+            arch = "amd64"
+        elif machine in ("aarch64", "arm64"):
+            arch = "arm64"
+        elif machine.startswith("arm"):
+            arch = "armv7"
+        else:
+            raise OSError(f"Unsupported architecture: {machine}")
         
-        if not download_url:
-            raise FileNotFoundError("Could not find zrok2 download URL for linux_amd64")
+        # Construct download URL
+        url = f"https://github.com/openziti/zrok/releases/download/{version}/zrok2_{version[1:]}_linux_{arch}.tar.gz"
+        print(f"Downloading from: {url}")
         
         # Download zrok2
-        urllib.request.urlretrieve(download_url, "zrok2.tar.gz")
+        urllib.request.urlretrieve(url, "zrok2.tar.gz")
         
         print("Extracting zrok2")
         with tarfile.open("zrok2.tar.gz", "r:gz") as tar:
