@@ -47,24 +47,15 @@ class Zrok:
         return data['environments']
 
     def find_env(self, name: str):
-        """Find a specific environment by its name.
-        
-        Args:
-            name (str): Name/description of the environment to find (case-insensitive)
-        
-        Returns:
-            dict: Environment information if found
-            None: If no environment matches the given name
-        """
         overview = self.get_env()
         if overview is None:
             return None
 
         for item in overview:
-            env = item["environment"]
-            if env["description"].lower() == name.lower():
+            # Trong v2, cấu trúc 'environment' có thể chứa các trường mới như 'EnvZId'
+            env = item.get("environment", {})
+            if env.get("description", "").lower() == name.lower():
                 return item
-            
         return None
 
     def delete_environment(self, zId: str):
@@ -79,7 +70,7 @@ class Zrok:
         headers = {
             "x-token": self.token,
             "Accept": "*/*",
-            "Content-Type": "application/zrok.v1+json"
+            "Content-Type": "application/zrok.v2+json"
         }
         payload = {
             "identity": zId
@@ -118,32 +109,21 @@ class Zrok:
         subprocess.run(["zrok2", "enable", self.token, "-d", env_name], check=True)
 
     def disable(self, name: str = None):
-        """Disable zrok.
-        
-        This function executes the zrok disable command to delete the environment stored in the local file ~/.zrok/environment.json,
-        and additionally removes any environments that could not be deleted through HTTP communication.
-        
-        Args:
-            name (str, optional): Name/description for the zrok environment.
-                                If not provided, uses the name from initialization.
-        """
         env_name = name if name is not None else self.name
-
-        # Delete the ~/.zrok/environment.json file
         try:
-            subprocess.run(["zrok2", "disable"], check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Warning: Local zrok2 disable failed - no environment to disable")
-            # If local disable failed, environment doesn't exist - nothing more to do
-            return
+            # Buộc dùng zrok2 để xóa config trong ~/.zrok2
+            subprocess.run(["zrok2", "disable"], check=True) 
+        except subprocess.CalledProcessError:
+            print(f"Warning: Local zrok2 disable failed")
 
-        # Only try API cleanup if local disable succeeded
+        # Dọn dẹp trên web console qua API
         try:
             env = self.find_env(env_name)
-            if env is not None:
+            if env:
+                # v2 dùng EnvZId hoặc zId để định danh
                 self.delete_environment(env['environment']['zId'])
         except Exception as e:
-            print(f"Warning: Could not clean up via API: {e}")
+            print(f"API cleanup warning: {e}")
 
     @staticmethod
     def install():

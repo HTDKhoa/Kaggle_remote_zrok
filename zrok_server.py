@@ -3,7 +3,6 @@ import argparse
 from utils import Zrok
 import string
 import random
-import time
 
 def generate_random_password(length=16):
     characters = (string.ascii_letters + string.digits + "!@#$%^*()-_=+{}[]<>.,?")
@@ -34,22 +33,10 @@ def main(args):
         print(f"Setting password for root user: {password}")
         subprocess.run(f"echo 'root:{password}' | sudo chpasswd", shell=True, check=True)
         
-    # Create zrok share with persistent token (zrok v2 feature)
-    print("Creating zrok share for SSH tunnel...")
-    share_process = subprocess.Popen([
-        "zrok2", "share", "private", 
-        "--backend-mode", "tcpTunnel", 
-        "--share-token", "kaggle-ssh",  # Persistent name
-        "localhost:22"
-    ])
-    
-    print("Zrok share 'kaggle-ssh' is active. Server ready. Press Ctrl+C to stop.")
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nStopping server...")
-        share_process.terminate()
+    print("Khởi tạo zrok2 tunnel...")
+    # Dùng --share-token để cố định tên cho dễ tìm
+    subprocess.Popen(["zrok2", "share", "private", "127.0.0.1:22", "--backend-mode", "tcpTunnel", "--share-token", "kaggle-ssh-unique"])
+    print("Tunnel đã mở với token: kaggle-ssh-unique")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Kaggle SSH connection setup')
