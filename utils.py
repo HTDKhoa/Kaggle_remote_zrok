@@ -132,14 +132,18 @@ class Zrok:
         # Delete the ~/.zrok/environment.json file
         try:
             subprocess.run(["zrok2", "disable"], check=True)
-        except Exception as e:
-            print(e)
-            print("zrok2 already disable")
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: Local zrok2 disable failed - no environment to disable")
+            # If local disable failed, environment doesn't exist - nothing more to do
+            return
 
-        # Delete environment via HTTP communication even if zrok is not enabled
-        env = self.find_env(env_name)
-        if env is not None:
-            self.delete_environment(env['environment']['zId'])
+        # Only try API cleanup if local disable succeeded
+        try:
+            env = self.find_env(env_name)
+            if env is not None:
+                self.delete_environment(env['environment']['zId'])
+        except Exception as e:
+            print(f"Warning: Could not clean up via API: {e}")
 
     @staticmethod
     def install():
