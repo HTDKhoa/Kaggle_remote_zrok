@@ -88,11 +88,13 @@ class Zrok:
         data_bytes = json.dumps(payload).encode('utf-8')
         
         req = urllib.request.Request(f"{self.base_url}/disable", headers=headers, data=data_bytes, method="POST")
-        with urllib.request.urlopen(req) as response:
-            status = response.getcode()
-
-        if status != 200:
-            raise Exception("Failed to delete environment")
+        try:
+            with urllib.request.urlopen(req) as response:
+                status = response.getcode()
+                if status != 200:
+                    raise Exception("Failed to delete environment")
+        except urllib.error.HTTPError as e:
+            raise Exception(f"HTTP Error {e.code}: Failed to delete environment")
 
         return True
 
