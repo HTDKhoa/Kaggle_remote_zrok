@@ -6,9 +6,6 @@ import json
 import subprocess
 import platform
 
-# Set specific zrok version to install (None = latest)
-ZROK_VERSION = "1.1.11"
-
 class Zrok:
     def __init__(self, token: str, name: str = None):
         """Initialize Zrok instance with API token and optional environment name.
@@ -143,94 +140,94 @@ class Zrok:
             self.delete_environment(env['environment']['zId'])
 
     @staticmethod
-    def install():
-        """Install zrok using the version specified in ZROK_VERSION.
+    def install(version: str = "1.1.11"):
+        """Install zrok, optionally specifying a version.
         
         This method:
-        1. Downloads zrok release from GitHub (uses ZROK_VERSION global variable)
-        2. Extracts the binary to the appropriate location based on OS
+        1. Downloads zrok release from GitHub (latest or specific version)
+        2. Extracts the binary to /usr/local/bin/
         3. Verifies the installation
         
-        To change version, edit ZROK_VERSION at the top of this file.
-        Set ZROK_VERSION = None to install latest version.
+        Args:
+            version (str, optional): Specific version to install (e.g., "1.1.11").
+                                   If not provided, installs the latest version.
         """
-        system = platform.system()
-        machine = platform.machine()
-        
-        # Map machine architecture to zrok naming
-        arch_map = {
-            'x86_64': 'amd64',
-            'AMD64': 'amd64',
-            'arm64': 'arm64',
-            'aarch64': 'arm64',
-            'armv7l': 'armv7',
-        }
-        arch = arch_map.get(machine, machine)
-        
-        # Determine asset pattern based on OS
-        if system == 'Linux':
-            asset_pattern = f"zrok_*_linux_{arch}.tar.gz"
-            install_path = "/usr/local/bin/"
-        elif system == 'Darwin':  # macOS
-            asset_pattern = f"zrok_*_darwin_{arch}.tar.gz"
-            install_path = "/usr/local/bin/"
-        elif system == 'Windows':
-            asset_pattern = f"zrok_*_windows_{arch}.tar.gz"
-            install_path = os.path.join(os.path.expanduser("~"), "zrok")
-        else:
-            raise Exception(f"Unsupported operating system: {system}")
 
-        version_str = ZROK_VERSION if ZROK_VERSION else "latest"
-        print(f"Downloading zrok {version_str} for {system} ({arch})")
-        
+        version_str = version if version else "latest"
+        print(f"Downloading zrok {version_str} release")
         # Get release info
-        if ZROK_VERSION:
-            release_url = f"https://api.github.com/repos/openziti/zrok/releases/tags/v{ZROK_VERSION}"
+        if version:
+            release_url = f"https://api.github.com/repos/openziti/zrok/releases/tags/v{version}"
         else:
             release_url = "https://api.github.com/repos/openziti/zrok/releases/latest"
         response = urllib.request.urlopen(release_url)
         data = json.loads(response.read())
         
-        # Find appropriate asset download URL
+        # Determine the correct download URL based on OS
         download_url = None
-        for asset in data["assets"]:
-            url = asset["browser_download_url"]
-            # Match based on OS and architecture in filename
-            if system == 'Linux' and f"_linux_{arch}.tar.gz" in url:
-                download_url = url
-                break
-            elif system == 'Darwin' and f"_darwin_{arch}.tar.gz" in url:
-                download_url = url
-                break
-            elif system == 'Windows' and f"_windows_{arch}.tar.gz" in url:
-                download_url = url
-                break
+        filename = None
+        system = platform.system()
+        
+        if system == 'Linux':
+            for asset in data["assets"]:
+                url = asset["browser_download_url"]
+                if "linux" in url.lower() and "amd64" in url.lower() and url.endswith(".tar.gz"):
+                    download_url = url
+                    filename = "zrok.tar.gz"
+                    break
+        elif system == 'Windows':
+            for asset in data["assets"]:
+                url = asset["browser_download_url"]
+                if "windows" in url.lower() and "amd64" in url.lower() and url.endswith(".tar.gz"):
+                    download_url = url
+                    filename = "zrok.tar.gz"
+                    break
+        elif system == 'Darwin':  # macOS
+            for asset in data["assets"]:
+                url = asset["browser_download_url"]
+                if "darwin" in url.lower() and "amd64" in url.lower() and url.endswith(".tar.gz"):
+                    download_url = url
+                    filename = "zrok.tar.gz"
+                    break
+        else:
+            raise Exception(f"Unsupported operating system: {system}. Please install zrok manually from https://docs.zrok.io/docs/guides/install/")
         
         if not download_url:
-            raise FileNotFoundError(f"Could not find zrok download URL for {system} {arch}")
+            raise FileNotFoundError(f"Could not find zrok download URL for {system}")
         
         # Download zrok
-        print(f"Downloading from {download_url}")
-        urllib.request.urlretrieve(download_url, "zrok.tar.gz")
+        urllib.request.urlretrieve(download_url, filename)
         
-        print("Extracting Zrok")
-        # Create install path if it doesn't exist
-        if not os.path.exists(install_path):
-            os.makedirs(install_path, exist_ok=True)
+        print("Extracting zrok")
         
-        with tarfile.open("zrok.tar.gz", "r:gz") as tar:
-            tar.extractall(install_path)
-        os.remove("zrok.tar.gz")
-        
-        # For Windows, add to PATH instructions
-        if system == 'Windows':
-            print(f"\nZrok extracted to: {install_path}")
-            print(f"Make sure to add {install_path} to your PATH environment variable")
-            print("Then restart your terminal or system for changes to take effect")
+        if system == 'Linux' or system == 'Darwin':
+            with tarfile.open(filename, "r:gz") as tar:
+                tar.extractall("/usr/local/bin/")
+            os.remove(filename)
+        elif system == 'Windows':
+            # Extract to user's local AppData or a directory in PATH
+            install_dir = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'zrok')
+            os.makedirs(install_dir, exist_ok=True)
+            
+            with tarfile.open(filename, "r:gz") as tar:
+                tar.extractall(install_dir)
+            os.remove(filename)
+            
+            # Add to PATH for current session
+            if install_dir not in os.environ.get('PATH', ''):
+                os.environ['PATH'] = install_dir + os.pathsep + os.environ['PATH']
+                print(f"\nzrok extracted to: {install_dir}")
+                print(f"Added to PATH for this session.")
+                print(f"For permanent PATH addition, run:")
+                print(f"   setx PATH \"%PATH%;{install_dir}\"")
+                print("Then restart your terminal.")
 
         # Check if zrok is installed correctly
         if not Zrok.is_installed():
-            raise RuntimeError("Failed to verify zrok installation")
+            if system == 'Windows':
+                raise RuntimeError("Failed to verify zrok installation. Please restart your terminal after running setx command.")
+            else:
+                raise RuntimeError("Failed to verify zrok installation")
         
         print("Successfully installed zrok")
 
