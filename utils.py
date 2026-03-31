@@ -195,7 +195,14 @@ class Zrok:
         download_url = None
         for asset in data["assets"]:
             url = asset["browser_download_url"]
-            if asset_pattern.replace("*", "").rstrip(".tar.gz") in url and url.endswith(".tar.gz"):
+            # Match based on OS and architecture in filename
+            if system == 'Linux' and f"_linux_{arch}.tar.gz" in url:
+                download_url = url
+                break
+            elif system == 'Darwin' and f"_darwin_{arch}.tar.gz" in url:
+                download_url = url
+                break
+            elif system == 'Windows' and f"_windows_{arch}.tar.gz" in url:
                 download_url = url
                 break
         
