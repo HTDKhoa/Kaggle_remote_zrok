@@ -32,11 +32,6 @@ def main(args):
         password = generate_random_password()
         print(f"Setting password for root user: {password}")
         subprocess.run(f"echo 'root:{password}' | sudo chpasswd", shell=True, check=True)
-        
-    print("Khởi tạo zrok2 tunnel...")
-    # Dùng --share-token để cố định tên cho dễ tìm
-    subprocess.Popen(["zrok2", "share", "private", "127.0.0.1:22", "--backend-mode", "tcpTunnel", "--share-token", "kaggle-ssh-unique"])
-    print("Tunnel đã mở với token: kaggle-ssh-unique")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Kaggle SSH connection setup')

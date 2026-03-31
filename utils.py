@@ -6,6 +6,9 @@ import json
 import subprocess
 import platform
 
+# Set specific zrok version to install (None = latest)
+ZROK_VERSION = "1.1.11"
+
 class Zrok:
     def __init__(self, token: str, name: str = None):
         """Initialize Zrok instance with API token and optional environment name.
@@ -19,7 +22,7 @@ class Zrok:
         
         self.token = token
         self.name = name
-        self.base_url = "https://api-v2.zrok.io/api/v2"
+        self.base_url = "https://api-v1.zrok.io/api/v1"
 
     def get_env(self):
         """Get overview of all zrok environments using HTTP API.
@@ -47,15 +50,24 @@ class Zrok:
         return data['environments']
 
     def find_env(self, name: str):
+        """Find a specific environment by its name.
+        
+        Args:
+            name (str): Name/description of the environment to find (case-insensitive)
+        
+        Returns:
+            dict: Environment information if found
+            None: If no environment matches the given name
+        """
         overview = self.get_env()
         if overview is None:
             return None
 
         for item in overview:
-            # Trong v2, cấu trúc 'environment' có thể chứa các trường mới như 'EnvZId'
-            env = item.get("environment", {})
-            if env.get("description", "").lower() == name.lower():
+            env = item["environment"]
+            if env["description"].lower() == name.lower():
                 return item
+            
         return None
 
     def delete_environment(self, zId: str):
@@ -70,7 +82,7 @@ class Zrok:
         headers = {
             "x-token": self.token,
             "Accept": "*/*",
-            "Content-Type": "application/zrok.v2+json"
+            "Content-Type": "application/zrok.v1+json"
         }
         payload = {
             "identity": zId
@@ -79,13 +91,11 @@ class Zrok:
         data_bytes = json.dumps(payload).encode('utf-8')
         
         req = urllib.request.Request(f"{self.base_url}/disable", headers=headers, data=data_bytes, method="POST")
-        try:
-            with urllib.request.urlopen(req) as response:
-                status = response.getcode()
-                if status != 200:
-                    raise Exception("Failed to delete environment")
-        except urllib.error.HTTPError as e:
-            raise Exception(f"HTTP Error {e.code}: Failed to delete environment")
+        with urllib.request.urlopen(req) as response:
+            status = response.getcode()
+
+        if status != 200:
+            raise Exception("Failed to delete environment")
 
         return True
 
@@ -106,86 +116,116 @@ class Zrok:
         if env_name is None:
             raise ValueError("Environment name must be provided either during initialization or when calling enable()")
         
-        subprocess.run(["zrok2", "enable", self.token, "-d", env_name], check=True)
+        subprocess.run(["zrok", "enable", self.token, "-d", env_name], check=True)
 
     def disable(self, name: str = None):
+        """Disable zrok.
+        
+        This function executes the zrok disable command to delete the environment stored in the local file ~/.zrok/environment.json,
+        and additionally removes any environments that could not be deleted through HTTP communication.
+        
+        Args:
+            name (str, optional): Name/description for the zrok environment.
+                                If not provided, uses the name from initialization.
+        """
         env_name = name if name is not None else self.name
-        try:
-            # Buộc dùng zrok2 để xóa config trong ~/.zrok2
-            subprocess.run(["zrok2", "disable"], check=True) 
-        except subprocess.CalledProcessError:
-            print(f"Warning: Local zrok2 disable failed")
 
-        # Dọn dẹp trên web console qua API
+        # Delete the ~/.zrok/environment.json file
         try:
-            env = self.find_env(env_name)
-            if env:
-                # v2 dùng EnvZId hoặc zId để định danh
-                self.delete_environment(env['environment']['zId'])
+            subprocess.run(["zrok", "disable"], check=True)
         except Exception as e:
-            print(f"API cleanup warning: {e}")
+            print(e)
+            print("zrok already disable")
+
+        # Delete environment via HTTP communication even if zrok is not enabled
+        env = self.find_env(env_name)
+        if env is not None:
+            self.delete_environment(env['environment']['zId'])
 
     @staticmethod
     def install():
-        """Install the latest version of zrok2.
+        """Install zrok using the version specified in ZROK_VERSION.
         
         This method:
-        1. Downloads the latest zrok2 release from GitHub
-        2. Extracts the binary to /usr/local/bin/
+        1. Downloads zrok release from GitHub (uses ZROK_VERSION global variable)
+        2. Extracts the binary to the appropriate location based on OS
         3. Verifies the installation
-        """
-        # Check if running on Windows
-        if platform.system() != 'Linux':
-            raise Exception("This script only works on Linux. For other operating systems, \
-                            please install zrok2 manually following the instructions at https://docs.zrok.io/docs/guides/install/")
-
-        print("Downloading latest zrok2 release")
         
-        # Get latest release info
-        response = urllib.request.urlopen("https://api.github.com/repos/openziti/zrok/releases/latest")
+        To change version, edit ZROK_VERSION at the top of this file.
+        Set ZROK_VERSION = None to install latest version.
+        """
+        system = platform.system()
+        machine = platform.machine()
+        
+        # Map machine architecture to zrok naming
+        arch_map = {
+            'x86_64': 'amd64',
+            'AMD64': 'amd64',
+            'arm64': 'arm64',
+            'aarch64': 'arm64',
+            'armv7l': 'armv7',
+        }
+        arch = arch_map.get(machine, machine)
+        
+        # Determine asset pattern based on OS
+        if system == 'Linux':
+            asset_pattern = f"zrok_*_linux_{arch}.tar.gz"
+            install_path = "/usr/local/bin/"
+        elif system == 'Darwin':  # macOS
+            asset_pattern = f"zrok_*_darwin_{arch}.tar.gz"
+            install_path = "/usr/local/bin/"
+        elif system == 'Windows':
+            asset_pattern = f"zrok_*_windows_{arch}.tar.gz"
+            install_path = os.path.join(os.path.expanduser("~"), "zrok")
+        else:
+            raise Exception(f"Unsupported operating system: {system}")
+
+        version_str = ZROK_VERSION if ZROK_VERSION else "latest"
+        print(f"Downloading zrok {version_str} for {system} ({arch})")
+        
+        # Get release info
+        if ZROK_VERSION:
+            release_url = f"https://api.github.com/repos/openziti/zrok/releases/tags/v{ZROK_VERSION}"
+        else:
+            release_url = "https://api.github.com/repos/openziti/zrok/releases/latest"
+        response = urllib.request.urlopen(release_url)
         data = json.loads(response.read())
         
-        # Determine architecture
-        machine = platform.machine()
-        if machine == "x86_64":
-            arch = "amd64"
-        elif machine in ("aarch64", "arm64"):
-            arch = "arm64"
-        elif machine.startswith("arm"):
-            arch = "armv7"
-        else:
-            raise OSError(f"Unsupported architecture: {machine}")
-        
-        # Find the correct asset from the release
+        # Find appropriate asset download URL
         download_url = None
-        for asset in data.get("assets", []):
+        for asset in data["assets"]:
             url = asset["browser_download_url"]
-            if f"linux_{arch}" in url and ".tar.gz" in url:
+            if asset_pattern.replace("*", "").rstrip(".tar.gz") in url and url.endswith(".tar.gz"):
                 download_url = url
-                print(f"Found release: {asset['name']}")
                 break
         
         if not download_url:
-            print("Available releases:")
-            for asset in data.get("assets", []):
-                print(f"  - {asset['name']}")
-            raise FileNotFoundError(f"Could not find zrok2 release for linux_{arch}")
+            raise FileNotFoundError(f"Could not find zrok download URL for {system} {arch}")
         
-        print(f"Downloading from: {download_url}")
+        # Download zrok
+        print(f"Downloading from {download_url}")
+        urllib.request.urlretrieve(download_url, "zrok.tar.gz")
         
-        # Download zrok2
-        urllib.request.urlretrieve(download_url, "zrok2.tar.gz")
+        print("Extracting Zrok")
+        # Create install path if it doesn't exist
+        if not os.path.exists(install_path):
+            os.makedirs(install_path, exist_ok=True)
         
-        print("Extracting zrok2")
-        with tarfile.open("zrok2.tar.gz", "r:gz") as tar:
-            tar.extractall("/usr/local/bin/")
-        os.remove("zrok2.tar.gz")
+        with tarfile.open("zrok.tar.gz", "r:gz") as tar:
+            tar.extractall(install_path)
+        os.remove("zrok.tar.gz")
+        
+        # For Windows, add to PATH instructions
+        if system == 'Windows':
+            print(f"\nZrok extracted to: {install_path}")
+            print(f"Make sure to add {install_path} to your PATH environment variable")
+            print("Then restart your terminal or system for changes to take effect")
 
-        # Check if zrok2 is installed correctly
+        # Check if zrok is installed correctly
         if not Zrok.is_installed():
-            raise RuntimeError("Failed to verify zrok2 installation")
+            raise RuntimeError("Failed to verify zrok installation")
         
-        print("Successfully installed zrok2")
+        print("Successfully installed zrok")
 
     @staticmethod
     def is_installed():
@@ -195,7 +235,7 @@ class Zrok:
             bool: True if zrok is installed and can be executed, False otherwise
         """
         try:
-            subprocess.run(["zrok2", "version"], check=True)
+            subprocess.run(["zrok", "version"], check=True)
             return True
         except (subprocess.CalledProcessError, FileNotFoundError):
             return False
@@ -209,7 +249,7 @@ class Zrok:
         """
         try:
             result = subprocess.run(
-                ["zrok2", "status"],
+                ["zrok", "status"],
                 capture_output=True,
                 text=True,
                 check=True

@@ -30,9 +30,9 @@ def main(args):
         raise Exception(f"SSH tunnel not found in {args.server_name} environment. Are you running the notebook?")
 
     # 2. Start zrok process
-    print(f"Đang kết nối tới tunnel: {share_token}")
+    print(f"zrok access private {share_token}")
     subprocess.Popen(
-        ["cmd", "/k", f"zrok2 access private {share_token} --bind 127.0.0.1:9191"],
+        ["cmd", "/k", f"zrok access private {share_token}"],
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
 
