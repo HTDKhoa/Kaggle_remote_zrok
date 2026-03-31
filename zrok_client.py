@@ -29,10 +29,10 @@ def main(args):
     if not share_token:
         raise Exception(f"SSH tunnel not found in {args.server_name} environment. Are you running the notebook?")
 
-    # 2. Start zrok2 process
-    print(f"zrok2 access private {share_token}")
+    # 2. Start zrok process
+    print(f"zrok access private {share_token}")
     subprocess.Popen(
-        ["cmd", "/k", f"zrok2 access private {share_token}"],
+        ["cmd", "/k", f"zrok access private {share_token}"],
         creationflags=subprocess.CREATE_NEW_CONSOLE
     )
 

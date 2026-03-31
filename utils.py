@@ -19,7 +19,7 @@ class Zrok:
         
         self.token = token
         self.name = name
-        self.base_url = "https://api-v1.zrok.io/api/v1"
+        self.base_url = "https://api-v2.zrok.io/api/v2"
 
     def get_env(self):
         """Get overview of all zrok environments using HTTP API.
@@ -99,7 +99,7 @@ class Zrok:
     def enable(self, name: str = None):
         """Enable zrok with the specified environment name.
         
-        This method runs the 'zrok2 enable' command with the provided token and
+        This method runs the 'zrok enable' command with the provided token and
         environment name. It will create a new environment if one doesn't exist.
         
         Args:
@@ -116,9 +116,9 @@ class Zrok:
         subprocess.run(["zrok2", "enable", self.token, "-d", env_name], check=True)
 
     def disable(self, name: str = None):
-        """Disable zrok2.
+        """Disable zrok.
         
-        This function executes the zrok2 disable command to delete the environment stored in the local file ~/.zrok2/environment.json,
+        This function executes the zrok disable command to delete the environment stored in the local file ~/.zrok/environment.json,
         and additionally removes any environments that could not be deleted through HTTP communication.
         
         Args:
@@ -127,14 +127,14 @@ class Zrok:
         """
         env_name = name if name is not None else self.name
 
-        # Delete the ~/.zrok2/environment.json file
+        # Delete the ~/.zrok/environment.json file
         try:
             subprocess.run(["zrok2", "disable"], check=True)
         except Exception as e:
             print(e)
-            print("zrok2 already disabled")
+            print("zrok2 already disable")
 
-        # Delete environment via HTTP communication even if zrok2 is not enabled
+        # Delete environment via HTTP communication even if zrok is not enabled
         env = self.find_env(env_name)
         if env is not None:
             self.delete_environment(env['environment']['zId'])
@@ -203,10 +203,10 @@ class Zrok:
 
     @staticmethod
     def is_installed():
-        """Check if zrok2 is installed and accessible.
+        """Check if zrok is installed and accessible.
         
         Returns:
-            bool: True if zrok2 is installed and can be executed, False otherwise
+            bool: True if zrok is installed and can be executed, False otherwise
         """
         try:
             subprocess.run(["zrok2", "version"], check=True)
@@ -216,10 +216,10 @@ class Zrok:
 
     @staticmethod
     def is_enabled() -> bool:
-        """Check if zrok2 is enabled.
+        """Check if zrok is enabled.
         
         Returns:
-            bool: True if zrok2 is enabled (Account Token and EnvZId are set), False otherwise
+            bool: True if zrok is enabled (Account Token and Ziti Identity are set), False otherwise
         """
         try:
             result = subprocess.run(
@@ -228,8 +228,8 @@ class Zrok:
                 text=True,
                 check=True
             )
-            # Check if both Account Token and EnvZId are set (zrok2 v2 uses EnvZId instead of Ziti Identity)
-            return "Account Token  <<SET>>" in result.stdout and "EnvZId  <<SET>>" in result.stdout
+            # Check if both Account Token and Ziti Identity are set
+            return "Account Token  <<SET>>" in result.stdout and "Ziti Identity  <<SET>>" in result.stdout
         except subprocess.CalledProcessError:
             return False
         except FileNotFoundError:
